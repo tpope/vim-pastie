@@ -8,6 +8,8 @@ if exists("g:loaded_pastie") || &cp
 endif
 let g:loaded_pastie = 1
 
+let g:pastie_private = 0
+
 augroup pastie
     autocmd!
     autocmd BufReadPre  http://pastie.org/*[0-9]?key=*           call s:extractcookies(expand("<amatch>"))
@@ -15,9 +17,9 @@ augroup pastie
     autocmd BufReadPost http://pastie.org/*[0-9]                 call s:PastieSwapout(expand("<amatch>"))
     autocmd BufReadPost http://pastie.org/pastes/*[0-9]/download call s:PastieRead(expand("<amatch>"))
     autocmd BufReadPost http://pastie.org/*[0-9].*               call s:PastieRead(expand("<amatch>"))
-    autocmd BufWriteCmd http://pastie.org/pastes/*[0-9]/download call s:PastieWrite(expand("<amatch>"))
-    autocmd BufWriteCmd http://pastie.org/*[0-9].*               call s:PastieWrite(expand("<amatch>"))
-    autocmd BufWriteCmd http://pastie.org/pastes/                call s:PastieWrite(expand("<amatch>"))
+    autocmd BufWriteCmd http://pastie.org/pastes/*[0-9]/download call s:PastieWrite(expand("<amatch>"), g:pastie_private)
+    autocmd BufWriteCmd http://pastie.org/*[0-9].*               call s:PastieWrite(expand("<amatch>"), g:pastie_private)
+    autocmd BufWriteCmd http://pastie.org/pastes/                call s:PastieWrite(expand("<amatch>"), g:pastie_private)
 
     autocmd BufReadPre  http://pastie.caboo.se/*[0-9]?key=*           call s:extractcookies(expand("<amatch>"))
     autocmd BufReadPost http://pastie.caboo.se/*[0-9]?key=*           call s:PastieSwapout(expand("<amatch>"))
@@ -285,7 +287,7 @@ function! s:afterload()
     syn match pastieNonText '^!!' containedin=rubyString
 endfunction
 
-function! s:PastieWrite(file)
+function! s:PastieWrite(file, ...)
     let parser = s:parser(&ft)
     let tmp = tempname()
     let num = matchstr(a:file,'/\@<!/\zs\d\+')
@@ -308,27 +310,30 @@ function! s:PastieWrite(file)
     endif
     silent exe "write ".tmp
     let result = ""
-    let rubycmd = 'obj = Net::HTTP.start(%{'.s:domain.'}){|h|h.post(%{'.url.'}, %q{'.method.'paste[parser]='.parser.pdn.'&paste[authorization]=burger&paste[key]=&paste[body]=} + File.read(%q{'.tmp.'}).gsub(/^(.*?) *#\!\! *#{36.chr}/,%{!\!}+92.chr+%{1}).gsub(/[^a-zA-Z0-9_.-]/n) {|s| %{%%%02x} % (s.ord rescue s[0])},{%{Cookie} => %{'.s:cookies().'}})}; print obj[%{Location}].to_s+%{ }+obj[%{Set-Cookie}].to_s'
+
+    let private = "&paste[restricted]=".g:pastie_private
+
+    let rubycmd = 'obj = Net::HTTP.start(%{'.s:domain.'}){|h|h.post(%{'.url.'}, %q{'.method.'paste[parser]='.parser.pdn.'&paste[authorization]=burger'.private.'&paste[key]=&paste[body]=} + File.read(%q{'.tmp.'}).gsub(/^(.*?) *#\!\! *#{36.chr}/,%{!\!}+92.chr+%{1}).gsub(/[^a-zA-Z0-9_.-]/n) {|s| %{%%%02x} % (s.ord rescue s[0])},{%{Cookie} => %{'.s:cookies().'}})}; print obj[%{Location}].to_s+%{ }+obj[%{Set-Cookie}].to_s'
     let result = system('ruby -rnet/http -e "'.rubycmd.'"')
     let redirect = matchstr(result,'^[^ ]*')
     let cookies  = matchstr(result,'^[^ ]* \zs.*')
     call s:extractcookiesfromheader(cookies)
     call delete(tmp)
     if redirect =~ '^\w\+://'
-        set nomodified
-        let b:pastie_update = 1
-        "silent! let @+ = result
-        silent! let @* = redirect
-        silent exe "file ".redirect.s:dl_suffix
-        " TODO: make a proper status message
-        echo '"'.redirect.'" written'
-        silent exe "doautocmd BufWritePost ".redirect.s:dl_suffix
+       set nomodified
+       let b:pastie_update = 1
+       "silent! let @+ = result
+       silent! let @* = redirect
+       silent exe "file ".redirect.s:dl_suffix
+       " TODO: make a proper status message
+       echo '"'.redirect.'" written'
+       silent exe "doautocmd BufWritePost ".redirect.s:dl_suffix
     else
-        if redirect == ''
-            let redirect = "Could not post to ".url
-        endif
-        let redirect = substitute(redirect,'^-e:1:\s*','','')
-        call s:error(redirect)
+       if redirect == ''
+           let redirect = "Could not post to ".url
+       endif
+       let redirect = substitute(redirect,'^-e:1:\s*','','')
+       call s:error(redirect)
     endif
 endfunction
 
