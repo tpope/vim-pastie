@@ -61,4 +61,7 @@ and in previous versions, :match (use ":match none" to disable).
 The URL sometimes disappears with the bang (:Pastie!) variant.  You can still
 retrieve it from the clipboard.
 
+If you want to create a private pastie you'll need to update `pastie_private`
+        $ let pastie_private = 1
+
  vim:tw=78:et:ft=help:norl:
